@@ -5,6 +5,11 @@
  * 实现与子系统的UART通信，包括CRC校验、命令发送、响应解析等功能
  */
 
+// 定义 GNU 扩展以支持 CLOCK_MONOTONIC
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "subsys.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -385,6 +390,7 @@ int subsys_get_version(subsys_handle_t handle, subsys_version_t* version) {
     // 解析版本信息
     memset(version, 0, sizeof(subsys_version_t));
     strncpy(version->version_string, response, sizeof(version->version_string) - 1);
+    version->version_string[sizeof(version->version_string) - 1] = '\0';  // 确保以 null 结尾
     
     // 尝试从版本字符串中提取版本号
     char* firmware_pos = strstr(response, "Firmware:");
@@ -512,8 +518,13 @@ int subsys_control_device(subsys_handle_t handle, subsys_device_t device, bool o
         }
         return 0;
     } else {
-        snprintf(handle->last_error, sizeof(handle->last_error), 
-                "设备控制失败: %s", response);
+        // 限制错误信息长度，避免截断警告
+        int written = snprintf(handle->last_error, sizeof(handle->last_error), 
+                "设备控制失败: %.200s", response);
+        // 确保字符串正确结尾
+        if (written >= (int)sizeof(handle->last_error)) {
+            handle->last_error[sizeof(handle->last_error) - 1] = '\0';
+        }
         return -1;
     }
 }
@@ -556,8 +567,13 @@ int subsys_read_temperature(subsys_handle_t handle, int sensor_id, float* temper
     char* endptr;
     float temp = strtof(response, &endptr);
     if (endptr == response) {
-        snprintf(handle->last_error, sizeof(handle->last_error), 
-                "温度值解析失败: %s", response);
+        // 限制错误信息长度，避免截断警告
+        int written = snprintf(handle->last_error, sizeof(handle->last_error), 
+                "温度值解析失败: %.200s", response);
+        // 确保字符串正确结尾
+        if (written >= (int)sizeof(handle->last_error)) {
+            handle->last_error[sizeof(handle->last_error) - 1] = '\0';
+        }
         return -1;
     }
     
