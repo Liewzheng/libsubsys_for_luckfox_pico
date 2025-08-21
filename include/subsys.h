@@ -158,6 +158,38 @@ bool subsys_version_check(const subsys_version_t* version, int min_major, int mi
  */
 int subsys_get_mcu_serial(subsys_handle_t handle, char* serial_number, size_t buffer_size);
 
+/**
+ * @brief 设置最大通信重试次数
+ * @param handle 子系统句柄
+ * @param max_retry_times 最大重试次数
+ * @return 0=成功，<0=失败
+ */
+int subsys_set_max_retry_times(subsys_handle_t handle, int max_retry_times);
+
+/**
+ * @brief 获取最大通信重试次数
+ * @param handle 子系统句柄
+ * @param *max_retry_times 最大重试次数指针
+ * @return 最大重试次数，<0表示错误
+ */
+int subsys_get_max_retry_times(subsys_handle_t handle, int *max_retry_times);
+
+/**
+ * @brief 设置通信重试延迟时间
+ * @param handle 子系统句柄
+ * @param retry_delay_ms 重试延迟时间（毫秒）
+ * @return 0=成功，<0=失败
+ */
+int subsys_set_retry_delay(subsys_handle_t handle, int retry_delay_ms);
+
+/**
+ * @brief 获取通信重试延迟时间
+ * @param handle 子系统句柄
+ * @param *retry_delay_ms 重试延迟时间指针
+ * @return 重试延迟时间，<0表示错误
+ */
+int subsys_get_retry_delay(subsys_handle_t handle, int *retry_delay_ms);
+
 // ============================================================================
 // 设备控制API
 // ============================================================================
