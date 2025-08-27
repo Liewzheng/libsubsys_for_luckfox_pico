@@ -28,8 +28,8 @@
 // 内部常量和宏定义
 // ============================================================================
 
-#define SUBSYS_MAX_RETRY_TIMES 3
-#define SUBSYS_RETRY_DELAY_MS 20
+#define SUBSYS_MAX_RETRY_TIMES 5      // 从3次增加到5次重试
+#define SUBSYS_RETRY_DELAY_MS 50      // 从20ms增加到50ms重试延迟
 #define SUBSYS_MAX_CMD_LENGTH 64
 #define SUBSYS_MAX_LINE_LENGTH 256
 #define SUBSYS_CRC_POLYNOMIAL 0xA001 // CRC16-USB多项式
@@ -47,6 +47,7 @@
 
 // 命令字符串映射表
 static const char *command_strings[] = {
+    [SUBSYS_CMD_RESET_ALL_DEVICES] = "REQ_RESET_ALL_DEVICES",
     [SUBSYS_CMD_GET_VERSION] = "REQ_GET_VERSION",
     [SUBSYS_CMD_GET_MCU_SERIAL] = "REQ_GET_MCU_SERIAL",
     [SUBSYS_CMD_TURN_ON_PUMP] = "REQ_TURN_ON_PUMP",
@@ -66,7 +67,8 @@ static const char *command_strings[] = {
     [SUBSYS_CMD_GET_HEATER1_WORK_TIME] = "REQ_GET_HEATER1_WORK_TIME",
     [SUBSYS_CMD_RESET_HEATER1_WORK_TIME] = "REQ_RESET_HEATER1_WORK_TIME",
     [SUBSYS_CMD_GET_HEATER2_WORK_TIME] = "REQ_GET_HEATER2_WORK_TIME",
-    [SUBSYS_CMD_RESET_HEATER2_WORK_TIME] = "REQ_RESET_HEATER2_WORK_TIME"};
+    [SUBSYS_CMD_RESET_HEATER2_WORK_TIME] = "REQ_RESET_HEATER2_WORK_TIME"
+};
 
 // ============================================================================
 // 内部数据结构
@@ -205,9 +207,12 @@ static int configure_uart(int fd, int baudrate)
     options.c_iflag &= ~(INLCR | ICRNL);
     options.c_oflag &= ~OPOST;
 
-    // 设置超时
-    options.c_cc[VTIME] = 10; // 1秒超时
+    // 设置超时 - 更保守的设置
+    options.c_cc[VTIME] = 20; // 2秒超时（从1秒增加到2秒）
     options.c_cc[VMIN] = 0;   // 非阻塞读取
+    
+    // 清空输入输出缓冲区
+    tcflush(fd, TCIOFLUSH);
 
     return tcsetattr(fd, TCSANOW, &options);
 }
@@ -223,9 +228,13 @@ static int configure_uart(int fd, int baudrate)
 static int send_command_and_receive_once(subsys_handle_t handle, const char *command,
                                          char *response, size_t response_size)
 {
-    // 清空串口接收缓冲区，避免残留数据干扰
+    // 强制清空串口接收缓冲区，避免残留数据干扰
+    tcflush(handle->fd, TCIOFLUSH);  // 清空输入和输出缓冲区
+    usleep(20000); // 等待20ms确保缓冲区完全清空
+    
+    // 再次清空确保彻底清理
     tcflush(handle->fd, TCIFLUSH);
-    usleep(10000); // 等待10ms确保缓冲区清空
+    usleep(10000); // 再等10ms
 
     // 计算CRC
     uint16_t crc = calculate_crc16((const uint8_t *)command, strlen(command));
@@ -264,14 +273,14 @@ static int send_command_and_receive_once(subsys_handle_t handle, const char *com
     size_t total_bytes = 0;
     bool response_complete = false;
     int read_attempts = 0;
-    const int max_read_attempts = 5;
+    const int max_read_attempts = 10; // 从5次增加到10次
 
     while (!response_complete && read_attempts < max_read_attempts && total_bytes < response_size - 1)
     {
         fd_set readfds_inner;
         struct timeval timeout_inner;
         timeout_inner.tv_sec = 0;
-        timeout_inner.tv_usec = 200000; // 200ms per read attempt
+        timeout_inner.tv_usec = 300000; // 从200ms增加到300ms per read attempt
 
         FD_ZERO(&readfds_inner);
         FD_SET(handle->fd, &readfds_inner);
@@ -285,10 +294,11 @@ static int send_command_and_receive_once(subsys_handle_t handle, const char *com
                 total_bytes += bytes_read;
                 response[total_bytes] = '\0';
 
-                // 检查是否接收到完整响应（包含CRC）
+                // 检查是否接收到完整响应（包含CRC和换行符）
                 char *comma = strrchr(response, ',');
-                if (comma && strlen(comma) >= 5)
-                { // ,XXXX format
+                char *newline = strchr(response, '\n');
+                if (comma && strlen(comma) >= 5 && newline)
+                { // ,XXXX\n format
                     // 检查逗号后是否有4位十六进制字符
                     char *crc_part = comma + 1;
                     if (strlen(crc_part) >= 4)
@@ -383,8 +393,14 @@ static int send_command_and_receive(subsys_handle_t handle, const char *command,
         if (retry_count > 0)
         {
             SUBSYS_DEBUG("重试第%d次发送命令: %s", retry_count, command);
-            // 重试前等待一段时间，避免频繁重试
-            usleep(100000); // 等待100ms
+            // 重试前使用递增延迟，避免频繁重试
+            int delay_ms = handle->retry_delay_ms * retry_count; // 递增延迟: 50ms, 100ms, 150ms...
+            if (delay_ms > 500) delay_ms = 500; // 最大延迟500ms
+            usleep(delay_ms * 1000); // 转换为微秒
+            
+            // 重试前再次清空缓冲区
+            tcflush(handle->fd, TCIOFLUSH);
+            usleep(10000);
         }
         else
         {
@@ -724,6 +740,45 @@ int subsys_get_retry_delay(subsys_handle_t handle, int *retry_delay_ms)
 
     *retry_delay_ms = handle->retry_delay_ms;
     return 0;
+}
+
+int subsys_reset_all_devices(subsys_handle_t handle)
+{
+    if (!handle)
+    {
+        return -1;
+    }
+
+    char response[SUBSYS_MAX_RESPONSE_SIZE];
+    int result = send_command_and_receive(handle, command_strings[SUBSYS_CMD_RESET_ALL_DEVICES],
+                                          response, sizeof(response));
+    if (result < 0)
+    {
+        return -1;
+    }
+
+    // 检查响应是否为成功
+    if (strcmp(response, "RSP_SUCCESS") == 0)
+    {
+        // 更新设备状态缓存
+        handle->device_info.pump_status = SUBSYS_STATUS_OFF;
+        handle->device_info.laser_status = SUBSYS_STATUS_OFF;
+        handle->device_info.heater1_status = SUBSYS_STATUS_OFF;
+        handle->device_info.heater2_status = SUBSYS_STATUS_OFF;
+        return 0;
+    }
+    else
+    {
+        // 限制错误信息长度，避免截断警告
+        int written = snprintf(handle->last_error, sizeof(handle->last_error),
+                               "重置所有设备失败: %.200s", response);
+        // 确保字符串正确结尾
+        if (written >= (int)sizeof(handle->last_error))
+        {
+            handle->last_error[sizeof(handle->last_error) - 1] = '\0';
+        }
+        return -1;
+    }
 }
 
 int subsys_control_device(subsys_handle_t handle, subsys_device_t device, bool on)

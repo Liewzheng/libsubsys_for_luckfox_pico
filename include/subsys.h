@@ -27,7 +27,7 @@ extern "C" {
 
 #define SUBSYS_UART_DEVICE "/dev/ttyS4"  // 默认UART设备
 #define SUBSYS_BAUDRATE 921600            // 波特率
-#define SUBSYS_TIMEOUT_MS 1000           // 通信超时时间(ms)
+#define SUBSYS_TIMEOUT_MS 2000           // 通信超时时间(ms) - 从1秒增加到2秒
 
 #define SUBSYS_MAX_RESPONSE_SIZE 256     // 最大响应长度
 #define SUBSYS_CRC_SIZE 4                // CRC长度(16进制字符)
@@ -42,26 +42,27 @@ typedef enum {
 
 // 命令类型(来自config.toml)
 typedef enum {
-    SUBSYS_CMD_GET_VERSION = 0,           // 获取固件版本
-    SUBSYS_CMD_GET_MCU_SERIAL = 1,        // 获取MCU序列号
-    SUBSYS_CMD_TURN_ON_PUMP = 2,          // 打开气泵
-    SUBSYS_CMD_TURN_OFF_PUMP = 3,         // 关闭气泵
-    SUBSYS_CMD_TURN_ON_LASER = 4,         // 打开激光
-    SUBSYS_CMD_TURN_OFF_LASER = 5,        // 关闭激光
-    SUBSYS_CMD_TURN_ON_HEATER1 = 6,       // 打开加热器1
-    SUBSYS_CMD_TURN_OFF_HEATER1 = 7,      // 关闭加热器1
-    SUBSYS_CMD_TURN_ON_HEATER2 = 8,       // 打开加热器2
-    SUBSYS_CMD_TURN_OFF_HEATER2 = 9,      // 关闭加热器2
-    SUBSYS_CMD_READ_TEMP1 = 10,           // 读取温度传感器1
-    SUBSYS_CMD_READ_TEMP2 = 11,           // 读取温度传感器2
-    SUBSYS_CMD_GET_PUMP_WORK_TIME = 12,   // 获取气泵工作时间
-    SUBSYS_CMD_RESET_PUMP_WORK_TIME = 13, // 重置气泵工作时间
-    SUBSYS_CMD_GET_LASER_WORK_TIME = 14,  // 获取激光工作时间
-    SUBSYS_CMD_RESET_LASER_WORK_TIME = 15,// 重置激光工作时间
-    SUBSYS_CMD_GET_HEATER1_WORK_TIME = 16,// 获取加热器1工作时间
-    SUBSYS_CMD_RESET_HEATER1_WORK_TIME = 17,// 重置加热器1工作时间
-    SUBSYS_CMD_GET_HEATER2_WORK_TIME = 18,// 获取加热器2工作时间
-    SUBSYS_CMD_RESET_HEATER2_WORK_TIME = 19,// 重置加热器2工作时间
+    SUBSYS_CMD_RESET_ALL_DEVICES = 0,     // 重置所有设备
+    SUBSYS_CMD_GET_VERSION = 1,           // 获取固件版本
+    SUBSYS_CMD_GET_MCU_SERIAL = 2,        // 获取MCU序列号
+    SUBSYS_CMD_TURN_ON_PUMP = 3,          // 打开气泵
+    SUBSYS_CMD_TURN_OFF_PUMP = 4,         // 关闭气泵
+    SUBSYS_CMD_TURN_ON_LASER = 5,         // 打开激光
+    SUBSYS_CMD_TURN_OFF_LASER = 6,        // 关闭激光
+    SUBSYS_CMD_TURN_ON_HEATER1 = 7,       // 打开加热器1
+    SUBSYS_CMD_TURN_OFF_HEATER1 = 8,      // 关闭加热器1
+    SUBSYS_CMD_TURN_ON_HEATER2 = 9,       // 打开加热器2
+    SUBSYS_CMD_TURN_OFF_HEATER2 = 10,     // 关闭加热器2
+    SUBSYS_CMD_READ_TEMP1 = 11,           // 读取温度传感器1
+    SUBSYS_CMD_READ_TEMP2 = 12,           // 读取温度传感器2
+    SUBSYS_CMD_GET_PUMP_WORK_TIME = 13,   // 获取气泵工作时间
+    SUBSYS_CMD_RESET_PUMP_WORK_TIME = 14, // 重置气泵工作时间
+    SUBSYS_CMD_GET_LASER_WORK_TIME = 15,  // 获取激光工作时间
+    SUBSYS_CMD_RESET_LASER_WORK_TIME = 16,// 重置激光工作时间
+    SUBSYS_CMD_GET_HEATER1_WORK_TIME = 17,// 获取加热器1工作时间
+    SUBSYS_CMD_RESET_HEATER1_WORK_TIME = 18,// 重置加热器1工作时间
+    SUBSYS_CMD_GET_HEATER2_WORK_TIME = 19,// 获取加热器2工作时间
+    SUBSYS_CMD_RESET_HEATER2_WORK_TIME = 20,// 重置加热器2工作时间
     SUBSYS_CMD_UNKNOWN = 127              // 未知命令
 } subsys_command_t;
 
@@ -193,6 +194,13 @@ int subsys_get_retry_delay(subsys_handle_t handle, int *retry_delay_ms);
 // ============================================================================
 // 设备控制API
 // ============================================================================
+
+/**
+ * @brief 重置所有设备
+ * @param handle 子系统句柄
+ * @return 0=成功，<0=失败
+ */
+int subsys_reset_all_devices(subsys_handle_t handle);
 
 /**
  * @brief 控制设备开关
